@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import math
+import struct
 import time
+import typing
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -9,6 +12,8 @@ from typing import Annotated, Literal, Optional, Union
 import can
 
 from annotated_types import Interval, MaxLen
+
+from .common import clip
 
 
 class ProtocolError(Exception):
@@ -41,13 +46,38 @@ class CommunicationType(IntEnum):
     SET_PROTOCOL = 25
 
 
-@dataclass
+type Position = Annotated[
+    float,
+    Interval(ge=-4 * math.pi, le=4 * math.pi),
+    "rad"
+]
+
+
+type Velocity = Annotated[float, Interval(ge=-44.0, le=44.0), "rad / s"]
+type Torque = Annotated[float, Interval(ge=-17.0, le=17.0), "N * m"]
+type Kp = Annotated[float, Interval(ge=0.0, le=500.0), "N * m / rad"]
+type Kd = Annotated[float, Interval(ge=0.0, le=5.0), "N * m / (rad / s)"]
+
+
+@dataclass(kw_only=True)
 class GetDeviceIdRequest:
     communication_type: Literal[CommunicationType.GET_DEVICE_ID] = \
         CommunicationType.GET_DEVICE_ID
 
 
-@dataclass
+@dataclass(kw_only=True)
+class ControlRequest:
+    position: Position
+    kp: Kp
+    kd: Kd
+    velocity: Velocity = 0.0
+    torque: Torque = 0.0
+
+    communication_type: Literal[CommunicationType.OPERATION_CONTROL] = \
+        CommunicationType.OPERATION_CONTROL
+
+
+@dataclass(kw_only=True)
 class GetDeviceIdResponse:
     id: bytes
 
@@ -55,18 +85,65 @@ class GetDeviceIdResponse:
         CommunicationType.GET_DEVICE_ID
 
 
+@dataclass(kw_only=True)
+class StatusRequest:
+    communication_type: Literal[CommunicationType.OPERATION_STATUS] = \
+        CommunicationType.OPERATION_STATUS
+
+
+@dataclass(kw_only=True)
+class DisableRequest:
+    communication_type: Literal[CommunicationType.DISABLE] = \
+        CommunicationType.DISABLE
+
+
+@dataclass(kw_only=True)
+class EnableRequest:
+    communication_type: Literal[CommunicationType.ENABLE] = \
+        CommunicationType.ENABLE
+
+
+@dataclass(kw_only=True)
+class SetZeroPositionRequest:
+    communication_type: Literal[CommunicationType.SET_ZERO_POSITION] = \
+        CommunicationType.SET_ZERO_POSITION
+
+
+@dataclass(kw_only=True)
+class StatusResponse:
+    mode: int
+    uncalibrated: bool
+    stall: bool
+    magnetic_encoder_fault: bool
+    overtemperature: bool
+    overcurrent: bool
+    undervoltage: bool
+
+    position: Position
+    velocity: Velocity
+    torque: Torque
+    temperature: float
+
+    communication_type: Literal[CommunicationType.OPERATION_STATUS] = \
+        CommunicationType.OPERATION_STATUS
+
+
 type Request = Union[
-    GetDeviceIdRequest
+    ControlRequest,
+    DisableRequest,
+    EnableRequest,
+    GetDeviceIdRequest,
+    SetZeroPositionRequest
 ]
 
 
 type Response = Union[
-    GetDeviceIdResponse
+    GetDeviceIdResponse,
+    StatusResponse
 ]
 
 
-type BytesLike = Union[bytes | bytearray]
-type Data = Annotated[BytesLike, MaxLen(8)]
+type Data = Annotated[bytes, MaxLen(8)]
 type DeviceId = Annotated[int, Interval(gt=0x00, le=0xff)]
 type Extra = Annotated[int, Interval(ge=0x00, le=0xffff)]
 
@@ -79,14 +156,64 @@ def open(name: str = "can0", bitrate: int = 1000000) -> can.BusABC:
     )
 
 
+def decode_float(value: int, interval: Interval) -> float:
+    assert isinstance(interval.ge, float)
+    assert isinstance(interval.le, float)
+
+    if interval.ge < 0:
+        result = ((float(value) / 0x7fff) - 1.0) * interval.le
+    else:
+        result = (float(value) / 0xffff) * interval.le
+    
+    return result
+
+
 def decode_get_id_response(data: Data, _: Extra) -> GetDeviceIdResponse:
-    return GetDeviceIdResponse(bytes(data))
+    return GetDeviceIdResponse(id=data)
+
+
+def decode_status_response(data: Data, extra: Extra) -> StatusResponse:
+    mode = (extra >> 14) & 0x03
+    uncalibrated = bool((extra >> 13) & 0x01)
+    stall = bool((extra >> 12) & 0x01)
+    magnetic_encoder_fault = bool((extra >> 11) & 0x01)
+    overtemperature = bool((extra >> 10) & 0x01)
+    overcurrent = bool((extra >> 9) & 0x01)
+    undervoltage = bool((extra >> 8) & 0x01)
+
+    position, velocity, torque, temperature = struct.unpack(">HHHH", data)
+
+    position_interval = typing.get_args(Position.__value__)[1]
+    position = decode_float(position, position_interval)
+
+    velocity_interval = typing.get_args(Velocity.__value__)[1]
+    velocity = decode_float(velocity, velocity_interval)
+
+    torque_interval = typing.get_args(Torque.__value__)[1]
+    torque = decode_float(torque, torque_interval)
+
+    temperature = float(temperature) * 0.1
+
+    return StatusResponse(
+        mode=mode,
+        uncalibrated=uncalibrated,
+        stall=stall,
+        magnetic_encoder_fault=magnetic_encoder_fault,
+        overtemperature=overtemperature,
+        overcurrent=overcurrent,
+        undervoltage=undervoltage,
+        position=position,
+        velocity=velocity,
+        torque=torque,
+        temperature=temperature
+    )
 
 
 def decode(
     arbitration_id: int,
     data: Data
 ) -> tuple[DeviceId, DeviceId, Response]:
+    print("decode")
     print(arbitration_id)
     print(data)
 
@@ -98,28 +225,81 @@ def decode(
     match communication_type:
         case CommunicationType.GET_DEVICE_ID:
             response = decode_get_id_response(data, extra)
+        case CommunicationType.OPERATION_STATUS:
+            response = decode_status_response(data, extra)
         case _:
             raise UnknownCommunicationTypeError(communication_type)
 
     return source_id, destination_id, response
 
 
-def encode_get_device_id_request(_: GetDeviceIdRequest) -> tuple[int, bytes]:
-    return 0, b"\x00" * 8
+def encode_float(value: float, interval: Interval) -> int:
+    assert isinstance(interval.ge, float)
+    assert isinstance(interval.le, float)
+
+    result = clip(value, minimum=interval.ge, maximum=interval.le)
+
+    if interval.ge < 0:
+        result = ((result / interval.le) + 1.0) * 0x7fff
+    else:
+        result = ((result) / interval.le) * 0xffff
+
+    result = int(result)
+    result = clip(result, minimum=0x00, maximum=0xffff)
+
+    return result
+
+
+def encode_control_request(request: ControlRequest) -> tuple[Extra, Data]:
+    position_interval = typing.get_args(Position.__value__)[1]
+    position = encode_float(request.position, position_interval)
+
+    velocity_interval = typing.get_args(Velocity.__value__)[1]
+    velocity = encode_float(request.velocity, velocity_interval)
+
+    torque_interval = typing.get_args(Torque.__value__)[1]
+    torque = encode_float(request.torque, torque_interval)
+
+    kp_interval = typing.get_args(Kp.__value__)[1]
+    kp = encode_float(request.kp, kp_interval)
+
+    kd_interval = typing.get_args(Kd.__value__)[1]
+    kd = encode_float(request.kd, kd_interval)
+
+    data = struct.pack(">HHHH", position, velocity, kp, kd)
+
+    return torque, data
+
+
+def encode_empty_request(source_id: DeviceId) -> tuple[Extra, Data]:
+    return source_id, b"\x00" * 8
+
+
+def encode_set_zero_position_request(
+    source_id: DeviceId
+) -> tuple[Extra, Data]:
+    return source_id, b"\x01\x00\x00\x00\x00\x00\x00\x00"
 
 
 def encode(
     source_id: DeviceId,
     destination_id: DeviceId,
     request: Request
-) -> tuple[int, bytes]:
+) -> tuple[int, Data]:
     match request.communication_type:
-        case CommunicationType.GET_DEVICE_ID:
-            extra, data = encode_get_device_id_request(request)
+        case (
+            CommunicationType.GET_DEVICE_ID |
+            CommunicationType.OPERATION_STATUS |
+            CommunicationType.DISABLE |
+            CommunicationType.ENABLE
+        ):
+            extra, data = encode_empty_request(source_id)
+        case CommunicationType.OPERATION_CONTROL:
+            extra, data = encode_control_request(request)
+        case CommunicationType.SET_ZERO_POSITION:
+            extra, data = encode_set_zero_position_request(source_id)
         case _:
             raise NotImplementedError
-
-    extra |= source_id
 
     arbitration_id = (
         (request.communication_type << 24) |
@@ -149,7 +329,7 @@ def write(
 
 def read(
     bus: can.BusABC,
-    timeout: Optional[float] = None
+    timeout: Optional[float]
 ) -> tuple[DeviceId, DeviceId, Response]:
     remaining = timeout
 
@@ -163,7 +343,7 @@ def read(
 
         if frame.is_extended_id:
             # When a motor drops off and reconnects, it sends a frame with
-            # zero device ID. These frames are recognized as non-extended ID
+            # a zero device ID. These frames are recognized as non-extended ID
             # frames.
 
             break
@@ -171,7 +351,7 @@ def read(
         if remaining is not None:
             remaining -= finish_time - start_time
 
-    return decode(frame.arbitration_id, frame.data)
+    return decode(frame.arbitration_id, bytes(frame.data))
 
 
 def send(
