@@ -13,7 +13,7 @@ import can
 
 from annotated_types import Interval, MaxLen
 
-from .common import clip
+from ..._utility import clip
 
 
 class ProtocolError(Exception):
@@ -133,7 +133,8 @@ type Request = Union[
     DisableRequest,
     EnableRequest,
     GetDeviceIdRequest,
-    SetZeroPositionRequest
+    SetZeroPositionRequest,
+    StatusRequest
 ]
 
 
@@ -213,10 +214,6 @@ def decode(
     arbitration_id: int,
     data: Data
 ) -> tuple[DeviceId, DeviceId, Response]:
-    print("decode")
-    print(arbitration_id)
-    print(data)
-
     communication_type = (arbitration_id >> 24) & 0x1f
     extra = (arbitration_id >> 8) & 0xffff
     source_id = extra & 0xff

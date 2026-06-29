@@ -1,6 +1,6 @@
 import pytest
 
-from actuators.rs02 import (
+from actuators.driver.robstride.protocol import (
     ControlRequest,
     DisableRequest,
     DeviceId,
@@ -88,8 +88,8 @@ def test_encoder(
         (
             (0x20003ff, b"\x7f\xff\x7f\xf8\x7f\xff\x01@"),
             (
-                3,
-                255,
+                0x03,
+                0xff,
                 StatusResponse(
                     mode=0,
                     uncalibrated=False,
@@ -108,7 +108,7 @@ def test_encoder(
         (
             (0x28003ff, b":M\x83:\x80M\x01J"),
             (
-                0x3,
+                0x03,
                 0xff,
                 StatusResponse(
                     mode=2,
