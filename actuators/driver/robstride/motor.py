@@ -48,7 +48,8 @@ class PositionMotor(api.PositionMotor):
     ) -> api.PositionMotor.Status:
         response = self._send(request)
 
-        assert isinstance(response, protocol.StatusResponse)
+        if not isinstance(response, protocol.StatusResponse):
+            raise protocol.ProtocolError
 
         response.position = (
             response.position *
