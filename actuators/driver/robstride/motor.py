@@ -7,7 +7,7 @@ from ...api import motor as api
 from . import protocol
 
 
-class PositionMotor:
+class PositionMotor(api.PositionMotor):
     @dataclass(kw_only=True)
     class Calibration:
         kp: protocol.Kp
@@ -27,8 +27,9 @@ class PositionMotor:
         self._bus = bus
         self._source_id = source_id
         self._destination_id = destination_id
-        self._calibration = calibration
         self._last_status = None
+
+        self.calibration = calibration
 
     def _send(self: Self, request: protocol.Request) -> protocol.Response:
         _, _, response = protocol.send(
@@ -36,7 +37,7 @@ class PositionMotor:
             self._source_id,
             self._destination_id,
             request,
-            timeout=self._calibration.timeout
+            timeout=self.calibration.timeout
         )
 
         return response
@@ -51,20 +52,20 @@ class PositionMotor:
 
         response.position = (
             response.position *
-            self._calibration.direction /
-            self._calibration.gear
+            self.calibration.direction /
+            self.calibration.gear
         )
 
         response.velocity = (
             response.position *
-            self._calibration.direction /
-            self._calibration.gear
+            self.calibration.direction /
+            self.calibration.gear
         )
 
         response.torque = (
             response.torque *
-            self._calibration.direction *
-            self._calibration.gear
+            self.calibration.direction *
+            self.calibration.gear
         )
 
         self._last_status = response
@@ -85,10 +86,10 @@ class PositionMotor:
 
     def move(self: Self, position: float) -> None:
         position = (
-            position * self._calibration.gear * self._calibration.direction
+            position * self.calibration.gear * self.calibration.direction
         )
 
-        position = self._calibration.bound(
+        position = self.calibration.bound(
             position,
             self._last_status.position if self._last_status else None
         )
@@ -96,8 +97,8 @@ class PositionMotor:
         self._process(
             protocol.ControlRequest(
                 position=position,
-                kp=self._calibration.kp,
-                kd=self._calibration.kd,
+                kp=self.calibration.kp,
+                kd=self.calibration.kd,
                 velocity=0.0,
                 torque=0.0
             )
