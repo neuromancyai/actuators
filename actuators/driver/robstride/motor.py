@@ -57,7 +57,7 @@ class PositionMotor(api.PositionMotor):
         )
 
         response.velocity = (
-            response.position *
+            response.velocity *
             self.calibration.direction /
             self.calibration.gear
         )

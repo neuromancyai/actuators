@@ -346,7 +346,7 @@ def read(
             break
 
         if remaining is not None:
-            remaining -= finish_time - start_time
+            remaining = max(remaining - (finish_time - start_time), 0.0)
 
     return decode(frame.arbitration_id, bytes(frame.data))
 
