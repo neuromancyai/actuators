@@ -16,6 +16,40 @@ from annotated_types import Interval, MaxLen
 from ..._utility import clip
 
 
+__all__ = (
+    "ControlRequest",
+    "Data",
+    "DeviceId",
+    "DisableRequest",
+    "EnableRequest",
+    "GetDeviceIdRequest",
+    "GetDeviceIdResponse",
+    "Kd",
+    "Kp",
+    "CommunicationType",
+    "Position",
+    "ProtocolError",
+    "Request",
+    "Response",
+    "SetZeroPositionRequest",
+    "StatusRequest",
+    "StatusResponse",
+    "Torque",
+    "UnknownCommunicationTypeError",
+    "Velocity",
+
+    "decode",
+    "encode",
+    "open",
+    "read",
+    "send",
+    "write"
+)
+
+
+type _Extra = Annotated[int, Interval(ge=0x00, le=0xffff)]
+
+
 class ProtocolError(Exception):
     pass
 
@@ -146,18 +180,9 @@ type Response = Union[
 
 type Data = Annotated[bytes, MaxLen(8)]
 type DeviceId = Annotated[int, Interval(gt=0x00, le=0xff)]
-type Extra = Annotated[int, Interval(ge=0x00, le=0xffff)]
 
 
-def open(name: str = "can0", bitrate: int = 1000000) -> can.BusABC:
-    return can.interface.Bus(
-        interface="socketcan",
-        channel=name,
-        bitrate=bitrate
-    )
-
-
-def decode_float(value: int, interval: Interval) -> float:
+def _decode_float(value: int, interval: Interval) -> float:
     assert isinstance(interval.ge, float)
     assert isinstance(interval.le, float)
 
@@ -169,11 +194,11 @@ def decode_float(value: int, interval: Interval) -> float:
     return result
 
 
-def decode_get_id_response(data: Data, _: Extra) -> GetDeviceIdResponse:
+def _decode_get_id_response(data: Data, _: _Extra) -> GetDeviceIdResponse:
     return GetDeviceIdResponse(id=data)
 
 
-def decode_status_response(data: Data, extra: Extra) -> StatusResponse:
+def _decode_status_response(data: Data, extra: _Extra) -> StatusResponse:
     mode = (extra >> 14) & 0x03
     uncalibrated = bool((extra >> 13) & 0x01)
     stall = bool((extra >> 12) & 0x01)
@@ -185,13 +210,13 @@ def decode_status_response(data: Data, extra: Extra) -> StatusResponse:
     position, velocity, torque, temperature = struct.unpack(">HHHH", data)
 
     position_interval = typing.get_args(Position.__value__)[1]
-    position = decode_float(position, position_interval)
+    position = _decode_float(position, position_interval)
 
     velocity_interval = typing.get_args(Velocity.__value__)[1]
-    velocity = decode_float(velocity, velocity_interval)
+    velocity = _decode_float(velocity, velocity_interval)
 
     torque_interval = typing.get_args(Torque.__value__)[1]
-    torque = decode_float(torque, torque_interval)
+    torque = _decode_float(torque, torque_interval)
 
     temperature = float(temperature) * 0.1
 
@@ -210,27 +235,8 @@ def decode_status_response(data: Data, extra: Extra) -> StatusResponse:
     )
 
 
-def decode(
-    arbitration_id: int,
-    data: Data
-) -> tuple[DeviceId, DeviceId, Response]:
-    communication_type = (arbitration_id >> 24) & 0x1f
-    extra = (arbitration_id >> 8) & 0xffff
-    source_id = extra & 0xff
-    destination_id = arbitration_id & 0xff
 
-    match communication_type:
-        case CommunicationType.GET_DEVICE_ID:
-            response = decode_get_id_response(data, extra)
-        case CommunicationType.OPERATION_STATUS:
-            response = decode_status_response(data, extra)
-        case _:
-            raise UnknownCommunicationTypeError(communication_type)
-
-    return source_id, destination_id, response
-
-
-def encode_float(value: float, interval: Interval) -> int:
+def _encode_float(value: float, interval: Interval) -> int:
     assert isinstance(interval.ge, float)
     assert isinstance(interval.le, float)
 
@@ -247,35 +253,55 @@ def encode_float(value: float, interval: Interval) -> int:
     return result
 
 
-def encode_control_request(request: ControlRequest) -> tuple[Extra, Data]:
+def _encode_control_request(request: ControlRequest) -> tuple[_Extra, Data]:
     position_interval = typing.get_args(Position.__value__)[1]
-    position = encode_float(request.position, position_interval)
+    position = _encode_float(request.position, position_interval)
 
     velocity_interval = typing.get_args(Velocity.__value__)[1]
-    velocity = encode_float(request.velocity, velocity_interval)
+    velocity = _encode_float(request.velocity, velocity_interval)
 
     torque_interval = typing.get_args(Torque.__value__)[1]
-    torque = encode_float(request.torque, torque_interval)
+    torque = _encode_float(request.torque, torque_interval)
 
     kp_interval = typing.get_args(Kp.__value__)[1]
-    kp = encode_float(request.kp, kp_interval)
+    kp = _encode_float(request.kp, kp_interval)
 
     kd_interval = typing.get_args(Kd.__value__)[1]
-    kd = encode_float(request.kd, kd_interval)
+    kd = _encode_float(request.kd, kd_interval)
 
     data = struct.pack(">HHHH", position, velocity, kp, kd)
 
     return torque, data
 
 
-def encode_empty_request(source_id: DeviceId) -> tuple[Extra, Data]:
+def _encode_empty_request(source_id: DeviceId) -> tuple[_Extra, Data]:
     return source_id, b"\x00" * 8
 
 
-def encode_set_zero_position_request(
+def _encode_set_zero_position_request(
     source_id: DeviceId
-) -> tuple[Extra, Data]:
+) -> tuple[_Extra, Data]:
     return source_id, b"\x01\x00\x00\x00\x00\x00\x00\x00"
+
+
+def decode(
+    arbitration_id: int,
+    data: Data
+) -> tuple[DeviceId, DeviceId, Response]:
+    communication_type = (arbitration_id >> 24) & 0x1f
+    extra = (arbitration_id >> 8) & 0xffff
+    source_id = extra & 0xff
+    destination_id = arbitration_id & 0xff
+
+    match communication_type:
+        case CommunicationType.GET_DEVICE_ID:
+            response = _decode_get_id_response(data, extra)
+        case CommunicationType.OPERATION_STATUS:
+            response = _decode_status_response(data, extra)
+        case _:
+            raise UnknownCommunicationTypeError(communication_type)
+
+    return source_id, destination_id, response
 
 
 def encode(
@@ -290,11 +316,11 @@ def encode(
             CommunicationType.DISABLE |
             CommunicationType.ENABLE
         ):
-            extra, data = encode_empty_request(source_id)
+            extra, data = _encode_empty_request(source_id)
         case CommunicationType.OPERATION_CONTROL:
-            extra, data = encode_control_request(request)
+            extra, data = _encode_control_request(request)
         case CommunicationType.SET_ZERO_POSITION:
-            extra, data = encode_set_zero_position_request(source_id)
+            extra, data = _encode_set_zero_position_request(source_id)
         case _:
             raise NotImplementedError
 
@@ -305,6 +331,14 @@ def encode(
     )
 
     return arbitration_id, data
+
+
+def open(name: str = "can0", bitrate: int = 1000000) -> can.BusABC:
+    return can.interface.Bus(
+        interface="socketcan",
+        channel=name,
+        bitrate=bitrate
+    )
 
 
 def write(

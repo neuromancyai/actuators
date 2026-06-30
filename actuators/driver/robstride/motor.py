@@ -7,6 +7,11 @@ from ...api import motor as api
 from . import protocol
 
 
+__all__ = (
+    "PositionMotor",
+)
+
+
 class PositionMotor(api.PositionMotor):
     @dataclass(kw_only=True)
     class Calibration:
