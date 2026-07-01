@@ -20,7 +20,7 @@ class PositionMotor(api.PositionMotor):
         gear: int = 1
         direction: Literal[-1, 1] = 1
         bound: api.BoundingFunction = api.default_bound
-        timeout: Optional[float] = 0.01
+        timeout: Optional[float] = 0.1
 
     def __init__(
         self: Self,
