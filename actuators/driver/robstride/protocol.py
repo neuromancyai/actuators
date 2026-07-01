@@ -360,6 +360,7 @@ def write(
 
 def read(
     bus: can.BusABC,
+    source_id: Optional[DeviceId],
     timeout: Optional[float]
 ) -> tuple[DeviceId, DeviceId, Response]:
     remaining = timeout
@@ -372,17 +373,18 @@ def read(
         if not frame:
             raise TimeoutError
 
-        if frame.is_extended_id:
-            # When a motor drops off and reconnects, it sends a frame with
-            # a zero device ID. These frames are recognized as non-extended ID
-            # frames.
+        # When a motor drops off and reconnects, it sends a frame with
+        # a zero device ID. These frames are recognized as non-extended ID
+        # frames.
 
-            break
+        if not frame.is_extended_id:
+            result = decode(frame.arbitration_id, bytes(frame.data))
+
+            if source_id is None or result[0] == source_id:
+                return result
 
         if remaining is not None:
             remaining = max(remaining - (finish_time - start_time), 0.0)
-
-    return decode(frame.arbitration_id, bytes(frame.data))
 
 
 def send(
@@ -393,6 +395,6 @@ def send(
     timeout: Optional[float] = None
 ) -> tuple[DeviceId, DeviceId, Response]:
     write(bus, source_id, destination_id, request)
-    response = read(bus, timeout=timeout)
+    response = read(bus, destination_id, timeout)
 
     return response
