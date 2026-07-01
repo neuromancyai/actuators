@@ -377,7 +377,7 @@ def read(
         # a zero device ID. These frames are recognized as non-extended ID
         # frames.
 
-        if not frame.is_extended_id:
+        if frame.is_extended_id:
             result = decode(frame.arbitration_id, bytes(frame.data))
 
             if source_id is None or result[0] == source_id:
