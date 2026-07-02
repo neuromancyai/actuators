@@ -50,6 +50,7 @@ class PositionMotor(api.PositionMotor):
             self._source_id,
             self._destination_id,
             request,
+            filter=filter,
             timeout=self.calibration.timeout
         )
 
