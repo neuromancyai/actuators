@@ -116,8 +116,8 @@ class PositionMotor(api.PositionMotor):
         self._process(
             protocol.ControlRequest(
                 position=position,
-                kp=self.calibration.kp,
-                kd=self.calibration.kd,
+                kp=self.calibration.kp / self.calibration.gear ** 2,
+                kd=self.calibration.kd / self.calibration.gear ** 2,
                 velocity=0.0,
                 torque=0.0
             )
