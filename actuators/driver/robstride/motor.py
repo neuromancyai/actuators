@@ -32,9 +32,9 @@ class PositionMotor(api.PositionMotor):
         self._bus = bus
         self._source_id = source_id
         self._destination_id = destination_id
-        self._last_status = None
 
         self.calibration = calibration
+        self.last_status = None
 
     def _send(
         self: Self,
@@ -87,7 +87,7 @@ class PositionMotor(api.PositionMotor):
             self.calibration.gear
         )
 
-        self._last_status = response
+        self.last_status = response
 
         return response
 
@@ -106,7 +106,7 @@ class PositionMotor(api.PositionMotor):
     def move(self: Self, position: float) -> None:
         position = self.calibration.bound(
             position,
-            self._last_status.position if self._last_status else None
+            self.last_status.position if self.last_status else None
         )
 
         position = (

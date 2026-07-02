@@ -33,6 +33,7 @@ class PositionMotor(Protocol):
         torque: float
 
     calibration: Calibration
+    last_status: Optional[Status]
 
     def enable(self: Self) -> None: ...
 
