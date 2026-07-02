@@ -7,7 +7,7 @@ import typing
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Literal, Optional, TypedDict, NotRequired, Union
 
 import can
 
@@ -29,6 +29,7 @@ __all__ = (
     "CommunicationType",
     "Position",
     "ProtocolError",
+    "ReadFilter",
     "Request",
     "Response",
     "SetZeroPositionRequest",
@@ -48,6 +49,10 @@ __all__ = (
 
 
 type _Extra = Annotated[int, Interval(ge=0x00, le=0xffff)]
+
+
+class _UnmetConditionError(ValueError):
+    pass
 
 
 class ProtocolError(Exception):
@@ -180,6 +185,12 @@ type Response = Union[
 
 type Data = Annotated[bytes, MaxLen(8)]
 type DeviceId = Annotated[int, Interval(gt=0x00, le=0xff)]
+
+
+class ReadFilter(TypedDict):
+    source_id: NotRequired[Optional[DeviceId]]
+    destination_id: NotRequired[Optional[DeviceId]]
+    response_type: NotRequired[Optional[type[Response]]]
 
 
 def _decode_float(value: int, interval: Interval) -> float:
@@ -360,7 +371,7 @@ def write(
 
 def read(
     bus: can.BusABC,
-    source_id: Optional[DeviceId],
+    filter: ReadFilter,
     timeout: Optional[float]
 ) -> tuple[DeviceId, DeviceId, Response]:
     remaining = timeout
@@ -368,23 +379,45 @@ def read(
     while True:
         start_time = time.time()
         frame = bus.recv(timeout=remaining)
-        finish_time = time.time()
 
         if not frame:
             raise TimeoutError
 
-        # When a motor drops off and reconnects, it sends a frame with
-        # a zero device ID. These frames are recognized as non-extended ID
-        # frames.
+        try:
+            if not frame.is_extended_id:
+                # When a motor drops off and reconnects, it sends a frame with
+                # a zero device ID. These frames are recognized as non-extended ID
+                # frames.
 
-        if frame.is_extended_id:
+                raise _UnmetConditionError
+
             result = decode(frame.arbitration_id, bytes(frame.data))
 
-            if source_id is None or result[0] == source_id:
-                return result
+            required_source_id = filter.get("source_id")
+            required_destination_id = filter.get("destination_id")
+            required_response_type = filter.get("response_type")
 
-        if remaining is not None:
-            remaining = max(remaining - (finish_time - start_time), 0.0)
+            if required_source_id is not None and \
+                result[0] != required_source_id:
+
+                raise _UnmetConditionError
+        
+            if required_destination_id is not None and \
+                result[1] != required_destination_id:
+
+                raise _UnmetConditionError
+        
+            if required_response_type is not None and \
+                not isinstance(result[2], required_response_type):
+
+                raise _UnmetConditionError
+
+            return result
+        except _UnmetConditionError:
+            finish_time = time.time()
+
+            if remaining is not None:
+                remaining = max(remaining - (finish_time - start_time), 0.0)
 
 
 def send(
@@ -392,9 +425,10 @@ def send(
     source_id: DeviceId,
     destination_id: DeviceId,
     request: Request,
-    timeout: Optional[float] = None
+    filter: ReadFilter = {},
+    timeout: Optional[float] = None,
 ) -> tuple[DeviceId, DeviceId, Response]:
     write(bus, source_id, destination_id, request)
-    response = read(bus, destination_id, timeout)
+    response = read(bus, filter, timeout)
 
     return response

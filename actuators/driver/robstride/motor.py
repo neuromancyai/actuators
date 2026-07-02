@@ -36,7 +36,15 @@ class PositionMotor(api.PositionMotor):
 
         self.calibration = calibration
 
-    def _send(self: Self, request: protocol.Request) -> protocol.Response:
+    def _send(
+        self: Self,
+        request: protocol.Request,
+        filter: protocol.ReadFilter = {}
+    ) -> protocol.Response:
+        filter = filter.copy()
+
+        filter["source_id"] = self._destination_id
+
         _, _, response = protocol.send(
             self._bus,
             self._source_id,
@@ -51,10 +59,14 @@ class PositionMotor(api.PositionMotor):
         self: Self,
         request: protocol.Request
     ) -> api.PositionMotor.Status:
-        response = self._send(request)
+        response = self._send(
+            request,
+            filter={
+                "response_type": protocol.StatusResponse
+            }
+        )
 
-        if not isinstance(response, protocol.StatusResponse):
-            raise protocol.ProtocolError
+        assert isinstance(response, protocol.StatusResponse)
 
         response.position = (
             response.position *
@@ -91,13 +103,13 @@ class PositionMotor(api.PositionMotor):
         return self._process(protocol.StatusRequest())
 
     def move(self: Self, position: float) -> None:
-        position = (
-            position * self.calibration.gear * self.calibration.direction
-        )
-
         position = self.calibration.bound(
             position,
             self._last_status.position if self._last_status else None
+        )
+
+        position = (
+            position * self.calibration.gear * self.calibration.direction
         )
 
         self._process(
