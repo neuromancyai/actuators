@@ -20,7 +20,6 @@ def main():
 
     with robstride.open() as bus:
         with robstride.PositionMotor(bus, 0x03, calibration) as motor:
-            motor.enable()
             motor.set_zero()
             motor.move(2 * math.pi)
 
