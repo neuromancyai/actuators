@@ -1,6 +1,6 @@
 import pytest
 
-from actuators.driver.robstride.protocol import (
+from actuators.robstride.protocol import (
     ControlRequest,
     DisableRequest,
     DeviceId,

@@ -13,7 +13,7 @@ import can
 
 from annotated_types import Interval, MaxLen
 
-from ..._utility import clip
+from .._utility import clip
 
 
 __all__ = (

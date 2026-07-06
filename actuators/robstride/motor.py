@@ -3,7 +3,7 @@ from typing import Literal, Optional, Self
 
 import can
 
-from ...api import motor as api
+from ..api import motor as api
 from . import protocol
 
 
@@ -97,12 +97,6 @@ class PositionMotor(api.PositionMotor):
     def disable(self: Self) -> None:
         self._process(protocol.DisableRequest())
 
-    def zero(self: Self) -> None:
-        self._process(protocol.SetZeroPositionRequest())
-
-    def status(self: Self) -> api.PositionMotor.Status:
-        return self._process(protocol.StatusRequest())
-
     def move(self: Self, position: protocol.Position) -> None:
         position = self.calibration.bound(
             position,
@@ -122,3 +116,9 @@ class PositionMotor(api.PositionMotor):
                 torque=0.0
             )
         )
+
+    def set_zero(self: Self) -> None:
+        self._process(protocol.SetZeroPositionRequest())
+
+    def status(self: Self) -> api.PositionMotor.Status:
+        return self._process(protocol.StatusRequest())
