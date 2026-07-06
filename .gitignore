@@ -1,4 +1,6 @@
 __pycache__
-.pyetst_cache
+.agents
+.codex
+.pytest_cache
 .ruff_cache
 .venv

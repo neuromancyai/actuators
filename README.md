@@ -7,24 +7,24 @@ Slick API for controlling various robotic actuators
 
 ```python
 import math
+import time
 
 from actuators import robstride
 
 
 def main():
-    bus = robstride.open()
-    motor = robstride.PositionMotor(
-        bus,
-        0x03,
-        robstride.PositionMotor.Calibration(
-            kp=1.0,
-            kd=0.1
-        )
+    calibration = robstride.PositionMotor.Calibration(
+        kp=1.0,
+        kd=0.1
     )
 
-    motor.disable()
-    motor.set_zero()
-    motor.move(2 * math.pi)
+    with robstride.open() as bus:
+        with robstride.PositionMotor(bus, 0x03, calibration) as motor:
+            motor.enable()
+            motor.set_zero()
+            motor.move(2 * math.pi)
+
+            time.sleep(1.0)
 
 
 if __name__ == "__main__":

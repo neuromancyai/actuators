@@ -1,3 +1,4 @@
+from types import TracebackType
 from typing import Callable, Literal, Optional, Protocol, Self
 
 from .._utility import clip
@@ -34,6 +35,16 @@ class PositionMotor(Protocol):
 
     calibration: Calibration
     last_status: Optional[Status]
+
+    def __enter__(self: Self) -> Self: ...
+
+    def __exit__(
+        self: Self,
+        exception_type: type[BaseException],
+        exception_value: Optional[BaseException],
+        traceback: Optional[TracebackType]
+    ) -> None:
+        ...
 
     def enable(self: Self) -> None: ...
 

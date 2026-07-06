@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from types import TracebackType
 from typing import Literal, Optional, Self
 
 import can
@@ -35,6 +36,19 @@ class PositionMotor(api.PositionMotor):
 
         self.calibration = calibration
         self.last_status = None
+
+    def __enter__(self: Self) -> Self:
+        self.enable()
+
+        return self
+
+    def __exit__(
+        self: Self,
+        exception_type: type[BaseException],
+        exception_value: Optional[BaseException],
+        traceback: Optional[TracebackType]
+    ) -> None:
+        self.disable()
 
     def _send(
         self: Self,
