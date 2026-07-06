@@ -103,7 +103,7 @@ class PositionMotor(api.PositionMotor):
     def status(self: Self) -> api.PositionMotor.Status:
         return self._process(protocol.StatusRequest())
 
-    def move(self: Self, position: float) -> None:
+    def move(self: Self, position: protocol.Position) -> None:
         position = self.calibration.bound(
             position,
             self.last_status.position if self.last_status else None
@@ -116,8 +116,8 @@ class PositionMotor(api.PositionMotor):
         self._process(
             protocol.ControlRequest(
                 position=position,
-                kp=self.calibration.kp / self.calibration.gear ** 2,
-                kd=self.calibration.kd / self.calibration.gear ** 2,
+                kp=self.calibration.kp,
+                kd=self.calibration.kd,
                 velocity=0.0,
                 torque=0.0
             )
