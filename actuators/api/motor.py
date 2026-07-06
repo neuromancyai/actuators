@@ -23,7 +23,7 @@ class PositionMotor(Protocol):
     class Calibration(Protocol):
         kp: float
         kd: float
-        gear: int
+        gear: float
         direction: Literal[-1, 1]
         bound: BoundingFunction
         timeout: Optional[float]

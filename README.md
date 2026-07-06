@@ -14,6 +14,7 @@ from actuators import robstride
 
 def main():
     calibration = robstride.PositionMotor.Calibration(
+        gear=1.0,
         kp=1.0,
         kd=0.1
     )
@@ -28,4 +29,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+
+## Installation
+
+The best way to install this library is using the `uv` package manager:
+
+```
+uv add git+https://github.com/neuromancyai/actuators
 ```

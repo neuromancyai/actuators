@@ -18,7 +18,7 @@ class PositionMotor(api.PositionMotor):
     class Calibration:
         kp: protocol.Kp
         kd: protocol.Kd
-        gear: int = 1
+        gear: float = 1.0
         direction: Literal[-1, 1] = 1
         bound: api.BoundingFunction = api.default_bound
         timeout: Optional[float] = 0.1
